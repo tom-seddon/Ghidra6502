@@ -120,6 +120,17 @@ class M6502SymbolicPropogator extends SymbolicPropogator {
 			}
 		}
 
+		if (wordOffset == 0) {
+			// Work around the (slightly dubious) assumption made in
+			// SymbolicPropogator.makeReference that references to address 0 aren't valid.
+			// Presumably it should actually have some min value settings, like the constant
+			// analyzer...
+			//
+			// But there's some sign extension handling that ends up turning address -65536
+			// into address 0, so easy enough to work around.
+			wordOffset = -65536;
+		}
+
 		super.makeReference(vContext, instruction, opIndex, knownSpaceID, wordOffset, size, refType, pcodeop,
 				knownReference, monitor);
 	}
