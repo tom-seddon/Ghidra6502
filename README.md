@@ -42,18 +42,6 @@ Ghidra should build the CPU descriptions automatically, but I've found
 this a bit flaky. You can build them by running `ant` in the `data`
 folder.
 
-# known issues
+# other notes
 
-* the new `6502 Constant Reference Analyzer` is active when the
-  language is `6502`/`Default`, but it behaves as the `Basic Constant
-  Reference Analyzer`. Need to fix this so that it just doesn't appear
-  in the first place
-* the new sleigh stuff produces totally unreadable C code - should
-  probably dial back the accuracy a bit. I didn't realise the sleigh
-  description would be used for this when writing it
-* Ghidra has special handling of address 0 in a few places, which I've
-  had show itself up most obviously as `STA (0),Y` disassembling as,
-  e.g., `STA (0),Y=>DAT_0000` rather than `STA (DAT_0000),Y`. I've
-  also seen `LDA #0` disassemble as `LDA #0=>DAT_0000`, which is
-  obviously wrong too, but that could be something I've done wrong
-* probably loads of others that I'll discover in time...
+Known issues: https://github.com/tom-seddon/Ghidra6502/issues
