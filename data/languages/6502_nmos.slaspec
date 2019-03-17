@@ -1,0 +1,2 @@
+@define ILLEGAL ""
+@include "6502_generic.sinc"

@@ -1,0 +1,584 @@
+# sleigh specification file for 6502
+
+define endian=little;
+define alignment=1;
+
+define space RAM      type=ram_space      size=2  default;
+define space register type=register_space size=1;
+
+define register offset=0x00  size=1 [ A X Y P ];
+define register offset=0x20 size=2  [ PC      SP   ];
+define register offset=0x20 size=1  [ PCL PCH S SH ];
+define register offset=0x30 size=1 [ N V B D I Z C ];	# status bits
+
+# this is no use - seems that the instruction pcode isn't always executed.
+# define register offset=0x40 size=2 [ REFADDR REFPC ];
+
+#TOKENS
+
+define token opbyte (8)
+   op       = (0,7)
+   
+   aaa      = (5,7)
+   bbb      = (2,4)
+   cc       = (0,1)
+;
+
+define token data8 (8)
+   imm8		= (0,7)
+   rel		= (0,7) signed
+;
+
+define token data (16)
+	imm16 = (0,15)
+;
+
+macro popSR() {
+    S=S+1;
+	local ccr = *:1 SP;
+	N = ccr[7,1];
+	V = ccr[6,1];
+	B = ccr[4,1];
+	D = ccr[3,1];
+	I = ccr[3,1];
+	Z = ccr[1,1];
+	C = ccr[0,1];
+}
+
+macro pushSR() {
+	local ccr:1 = 0xff;
+	ccr[7,1] = N;
+	ccr[6,1] = V;
+	ccr[4,1] = B;
+	ccr[3,1] = D;
+	ccr[3,1] = I;
+	ccr[1,1] = Z;
+	ccr[0,1] = C;
+	*:1 (SP) = ccr;
+	S = S-1;
+}
+
+macro resultFlags(value) {
+	Z = (value == 0);
+	N = (value s< 0);
+}
+
+macro subtraction_flags1(register, operand, result) {
+	local complement_register = ~register;
+	
+	V = ( ((register & ~operand & ~result) | (complement_register & operand & result)) & 0b10000000 ) != 0;
+	N = (result s< 0);
+	Z = (result == 0);
+	C = ( ((complement_register & operand) | (operand & result) | (result & complement_register)) & 0b10000000 ) != 0;
+}
+
+macro adc(operand) {
+	local oldC=C;
+	C=carry(A,operand);
+	A=A+operand+oldC;
+	resultFlags(A);
+	V=C;
+}
+
+macro and(operand) {
+	A = A & operand; 
+	resultFlags(A);
+}
+
+macro bit(operand) {
+	Z = (A & operand) == 0;
+	N = (operand & 0x80) != 0;
+	V = (operand & 0x40) != 0;
+}
+
+macro compare(reg, operand) {
+	local tmp = reg - operand;
+	resultFlags(tmp);
+	C = (reg < operand);
+}
+
+macro cmp(operand) {
+	compare(A, operand);
+}
+
+macro cpx(operand) {
+	compare(X, operand);
+}
+
+macro cpy(operand) {
+	compare(Y, operand);
+}
+
+macro eor(operand) {
+	A = A ^ operand;
+	resultFlags(A);
+}
+
+macro ora(operand) {
+	A=A|operand;
+	resultFlags(A);
+}
+
+macro sbc(operand) {
+	local op1 = operand;
+	local result = A - op1 - C;
+	
+	subtraction_flags1(A, op1, result);
+	A = result;	
+	
+	# resultFlags(tmp);
+	# C = ((A <= op1) * C) | (A < op1);
+	# A = tmp;
+}
+
+macro asl(operand) {
+	local tmp = operand;
+	C = tmp >> 7;
+	tmp = tmp << 1;
+	operand = tmp;
+	resultFlags(tmp);	
+}
+
+macro dec(operand) {
+	local tmp = operand - 1;
+	operand = tmp;
+	resultFlags(tmp);
+}
+
+macro inc(operand) {
+	local tmp = operand + 1;
+	operand = tmp;
+	resultFlags(tmp);
+}
+
+macro lsr(operand) {
+	local tmp = operand;
+	C = tmp & 1;
+	tmp = tmp >> 1;
+	operand = tmp;
+	Z = (tmp == 0);
+	N = 0;	
+}
+
+macro rol(operand) {
+	local tmpC = C;
+	local op2 = operand;
+	C = op2 >> 7;
+	local result = op2 << 1;
+	result = result | tmpC;
+	operand = result;
+	resultFlags(result);	
+}
+
+macro ror(operand) {
+	local tmpC = C << 7;
+	local tmp = operand;
+	C = tmp & 1;
+	tmp = tmp >> 1;
+	tmp = tmp | tmpC;
+	operand = tmp;
+	resultFlags(tmp);	
+}
+
+@ifdef CMOS
+macro trb(operand) {
+    local tmp=operand;
+	Z=(tmp&A)==0;
+	operand=operand&~A;
+}
+@endif
+
+@ifdef CMOS
+macro tsb(operand) {
+    local tmp=operand;
+	Z=(tmp&A)==0;
+	operand=operand|A;
+}
+@endif
+
+macro setref(value) {
+#	REFPC=PC;
+#	REFADDR=value;
+}
+
+################################################################
+# Pseudo Instructions
+################################################################
+
+define pcodeop readIRQ;
+
+################################################################
+REL: reloc		is rel	[ reloc = inst_next + rel; ] {
+	export *:2 reloc;
+} 
+
+ACC: A is A {export A;}
+IMM: "#"imm8 is imm8 {
+	tmp:1=imm8;
+	export tmp;
+}
+
+ZPG: imm8 is imm8 {
+	setref(imm8); 
+	export *:1 imm8;
+}
+
+ZPX: imm8,X is imm8 & X {
+	setref(imm8); 
+	tmp:2=imm8+zext(X);
+	export *:1 tmp;
+}
+
+ZPY: imm8,Y is imm8 & Y {
+	setref(imm8); 
+	tmp:2=imm8+zext(Y);
+	export *:1 tmp;
+}
+
+ABS: imm16 is imm16 {
+	setref(imm16); 
+	export *:1 imm16;
+}
+
+ABX: imm16,X is imm16 & X {
+	setref(imm16); 
+	tmp:2=imm16+zext(X); 
+	export *:1 tmp;
+}
+
+ABY: imm16,Y is imm16 & Y {
+	setref(imm16);
+	tmp:2=imm16+zext(Y);
+	export *:1 tmp;
+}
+
+ZIX: (imm8,X) is imm8 & X {
+	zaddr:2=(imm8+zext(X))&0xff;
+	lsb:1=*:1 zaddr;
+	zaddr=(zaddr+1)&0xff;
+	msb:1=*:1 zaddr;
+	addr:2=(zext(msb)<<8)|zext(lsb);
+	setref(addr);
+	export *:1 addr;
+}
+
+ZIY: (imm8),Y is imm8 & Y {
+	setref(imm8);
+    zaddr:2=imm8;
+	lsb:1=*:1 zaddr;
+	zaddr=(zaddr+1)&0xff;
+	msb:1=*:1 zaddr;
+	addr:2=((zext(msb)<<8)|zext(lsb))+zext(Y);
+	export *:1 addr;
+}
+
+@ifdef CMOS
+ZIN: (imm8) is imm8 {
+	setref(imm8);
+    zaddr:2=imm8;
+	lsb:1=*:1 zaddr;
+	zaddr=(zaddr+1)&0xff;
+	msb:1=*:1 zaddr;
+	addr:2=(zext(msb)<<8)|zext(lsb);
+	export *:1 addr;
+}
+@endif
+
+AIN: (imm16) is imm16 {
+	setref(imm16);
+    iaddr:2=imm16;
+ 	lsb=*:1 iaddr;
+	iaddr=(iaddr&0xff00)|(((iaddr&0xff)+1)&0xff);
+	msb=*:1 iaddr;
+	addr:2=(zext(msb)<<8)|zext(lsb);
+	export addr;
+}
+
+@ifdef CMOS
+AIX: (imm16,X) is imm16 & X {
+	setref(imm16);
+    iaddr:2=imm16+zext(X);
+	export *:2 iaddr;
+}
+@endif
+
+# Read instructions
+
+:ADC ZIX is (op=0x61) ; ZIX { adc(ZIX); }
+:ADC ZPG is (op=0x65) ; ZPG { adc(ZPG); }
+:ADC IMM is (op=0x69) ; IMM { adc(IMM); }
+:ADC ABS is (op=0x6d) ; ABS { adc(ABS); }
+:ADC ZIY is (op=0x71) ; ZIY { adc(ZIY); }
+:ADC ZPX is (op=0x75) ; ZPX { adc(ZPX); }
+:ADC ABY is (op=0x79) ; ABY { adc(ABY); }
+:ADC ABX is (op=0x7d) ; ABX { adc(ABX); }
+
+:AND ABS is (op=0x2d) ; ABS { and(ABS); } 
+:AND ABX is (op=0x3d) ; ABX { and(ABX); } 
+:AND ABY is (op=0x39) ; ABY { and(ABY); } 
+:AND IMM is (op=0x29) ; IMM { and(IMM); } 
+:AND ZIX is (op=0x21) ; ZIX { and(ZIX); } 
+:AND ZIY is (op=0x31) ; ZIY { and(ZIY); } 
+:AND ZPG is (op=0x25) ; ZPG { and(ZPG); } 
+:AND ZPX is (op=0x35) ; ZPX { and(ZPX); }
+
+:BIT ABS is (op=0x2c) ; ABS { bit(ABS); } 
+:BIT ZPG is (op=0x24) ; ZPG { bit(ZPG); }
+
+:CMP ABS is (op=0xcd) ; ABS { cmp(ABS); } 
+:CMP ABX is (op=0xdd) ; ABX { cmp(ABX); } 
+:CMP ABY is (op=0xd9) ; ABY { cmp(ABY); } 
+:CMP IMM is (op=0xc9) ; IMM { cmp(IMM); } 
+:CMP ZIX is (op=0xc1) ; ZIX { cmp(ZIX); } 
+:CMP ZIY is (op=0xd1) ; ZIY { cmp(ZIY); } 
+:CMP ZPG is (op=0xc5) ; ZPG { cmp(ZPG); } 
+:CMP ZPX is (op=0xd5) ; ZPX { cmp(ZPX); }
+
+:CPX ABS is (op=0xec) ; ABS { cpx(ABS); } 
+:CPX IMM is (op=0xe0) ; IMM { cpx(IMM); } 
+:CPX ZPG is (op=0xe4) ; ZPG { cpx(ZPG); }
+
+:CPY ABS is (op=0xcc) ; ABS { cpy(ABS); } 
+:CPY IMM is (op=0xc0) ; IMM { cpy(IMM); } 
+:CPY ZPG is (op=0xc4) ; ZPG { cpy(ZPG); }
+
+:EOR ABS is (op=0x4d) ; ABS { eor(ABS); } 
+:EOR ABX is (op=0x5d) ; ABX { eor(ABX); } 
+:EOR ABY is (op=0x59) ; ABY { eor(ABY); } 
+:EOR IMM is (op=0x49) ; IMM { eor(IMM); } 
+:EOR ZIX is (op=0x41) ; ZIX { eor(ZIX); } 
+:EOR ZIY is (op=0x51) ; ZIY { eor(ZIY); } 
+:EOR ZPG is (op=0x45) ; ZPG { eor(ZPG); } 
+:EOR ZPX is (op=0x55) ; ZPX { eor(ZPX); }
+
+:ORA ABS is (op=0x0d) ; ABS { ora(ABS); } 
+:ORA ABX is (op=0x1d) ; ABX { ora(ABX); } 
+:ORA ABY is (op=0x19) ; ABY { ora(ABY); } 
+:ORA IMM is (op=0x09) ; IMM { ora(IMM); } 
+:ORA ZIX is (op=0x01) ; ZIX { ora(ZIX); } 
+:ORA ZIY is (op=0x11) ; ZIY { ora(ZIY); } 
+:ORA ZPG is (op=0x05) ; ZPG { ora(ZPG); } 
+:ORA ZPX is (op=0x15) ; ZPX { ora(ZPX); }
+
+:SBC ABS is (op=0xed) ; ABS { sbc(ABS); } 
+:SBC ABX is (op=0xfd) ; ABX { sbc(ABX); } 
+:SBC ABY is (op=0xf9) ; ABY { sbc(ABY); } 
+:SBC IMM is (op=0xe9) ; IMM { sbc(IMM); } 
+:SBC ZIX is (op=0xe1) ; ZIX { sbc(ZIX); } 
+:SBC ZIY is (op=0xf1) ; ZIY { sbc(ZIY); } 
+:SBC ZPG is (op=0xe5) ; ZPG { sbc(ZPG); } 
+:SBC ZPX is (op=0xf5) ; ZPX { sbc(ZPX); } 
+
+@ifdef CMOS
+:ADC ZIN is (op=0x72) ; ZIN { adc(ZIN); }
+:AND ZIN is (op=0x32) ; ZIN { and(ZIN); }
+:BIT IMM is (op=0x89) ; IMM { bit(IMM); }
+:BIT ZPX is (op=0x34) ; ZPX { bit(ZPX); }
+:BIT ABX is (op=0x3c) ; ABX { bit(ABX); }
+:CMP ZIN is (op=0xd2) ; ZIN { cmp(ZIN); }
+:EOR ZIN is (op=0x52) ; ZIN { eor(ZIN); }
+:ORA ZIN is (op=0x12) ; ZIN { ora(ZIN); }
+:SBC ZIN is (op=0xf2) ; ZIN { sbc(ZIN); }
+@endif
+
+# Read-modify-write instructions
+
+:ASL ACC is (op=0x0a) ; ACC { asl(ACC); }
+:ASL ABS is (op=0x0e) ; ABS { asl(ABS); }
+:ASL ABX is (op=0x1e) ; ABX { asl(ABX); }
+:ASL ZPG is (op=0x06) ; ZPG { asl(ZPG); }
+:ASL ZPX is (op=0x16) ; ZPX { asl(ZPX); }
+:LSR ACC is (op=0x4a) ; ACC { asl(ACC); }
+:LSR ABS is (op=0x4e) ; ABS { lsr(ABS); }
+:LSR ABX is (op=0x5e) ; ABX { lsr(ABX); }
+:LSR ZPG is (op=0x46) ; ZPG { lsr(ZPG); }
+:LSR ZPX is (op=0x56) ; ZPX { lsr(ZPX); }
+:ROL ACC is (op=0x2a) ; ACC { asl(ACC); }
+:ROL ABS is (op=0x2e) ; ABS { rol(ABS); }
+:ROL ABX is (op=0x3e) ; ABX { rol(ABX); }
+:ROL ZPG is (op=0x26) ; ZPG { rol(ZPG); }
+:ROL ZPX is (op=0x36) ; ZPX { rol(ZPX); }
+:ROR ACC is (op=0x6a) ; ACC { asl(ACC); }
+:ROR ABS is (op=0x6e) ; ABS { ror(ABS); }
+:ROR ABX is (op=0x7e) ; ABX { ror(ABX); }
+:ROR ZPG is (op=0x66) ; ZPG { ror(ZPG); }
+:ROR ZPX is (op=0x76) ; ZPX { ror(ZPX); }
+
+:DEC ABS is (op=0xce) ; ABS { dec(ABS); }
+:DEC ABX is (op=0xde) ; ABX { dec(ABX); }
+:DEC ZPG is (op=0xc6) ; ZPG { dec(ZPG); }
+:DEC ZPX is (op=0xd6) ; ZPX { dec(ZPX); }
+:INC ABS is (op=0xee) ; ABS { inc(ABS); }
+:INC ABX is (op=0xfe) ; ABX { inc(ABX); }
+:INC ZPG is (op=0xe6) ; ZPG { inc(ZPG); }
+:INC ZPX is (op=0xf6) ; ZPX { inc(ZPX); }
+
+@ifdef CMOS
+:DEC ACC is (op=0x3a) ; ACC { dec(ACC); }
+:INC ACC is (op=0x1a) ; ACC { inc(ACC); }
+:TRB ZPG is (op=0x14) ; ZPG { trb(ZPG); }
+:TRB ABS is (op=0x1c) ; ABS { trb(ABS); }
+:TSB ZPG is (op=0x04) ; ZPG { tsb(ZPG); }
+:TSB ZPG is (op=0x0c) ; ZPG { tsb(ZPG); }
+@endif
+
+# Load instructions
+
+:LDA ABS is (op=0xad) ; ABS { A = ABS; resultFlags(A); }
+:LDA ABX is (op=0xbd) ; ABX { A = ABX; resultFlags(A); }
+:LDA ABY is (op=0xb9) ; ABY { A = ABY; resultFlags(A); }
+:LDA IMM is (op=0xa9) ; IMM { A = IMM; resultFlags(A); }
+:LDA ZIX is (op=0xa1) ; ZIX { A = ZIX; resultFlags(A); }
+:LDA ZIY is (op=0xb1) ; ZIY { A = ZIY; resultFlags(A); }
+:LDA ZPG is (op=0xa5) ; ZPG { A = ZPG; resultFlags(A); }
+:LDA ZPX is (op=0xb5) ; ZPX { A = ZPX; resultFlags(A); }
+:LDX ABS is (op=0xae) ; ABS { X = ABS; resultFlags(X); }
+:LDX ABY is (op=0xbe) ; ABY { X = ABY; resultFlags(X); }
+:LDX IMM is (op=0xa2) ; IMM { X = IMM; resultFlags(X); }
+:LDX ZPG is (op=0xa6) ; ZPG { X = ZPG; resultFlags(X); }
+:LDX ZPY is (op=0xb6) ; ZPY { X = ZPY; resultFlags(X); }
+:LDY ABS is (op=0xac) ; ABS { Y = ABS; resultFlags(Y); }
+:LDY ABX is (op=0xbc) ; ABX { Y = ABX; resultFlags(Y); }
+:LDY IMM is (op=0xa0) ; IMM { Y = IMM; resultFlags(Y); }
+:LDY ZPG is (op=0xa4) ; ZPG { Y = ZPG; resultFlags(Y); }
+:LDY ZPX is (op=0xb4) ; ZPX { Y = ZPX; resultFlags(Y); }
+
+@ifdef CMOS
+:LDA ZIN is (op=0xb2) ; ZIN { A = ZIN; resultFlags(A); }
+@endif
+
+# Store instructions
+
+:STA ABS is (op=0x8d) ; ABS { ABS = A; }
+:STA ABX is (op=0x9d) ; ABX { ABX = A; }
+:STA ABY is (op=0x99) ; ABY { ABY = A; }
+:STA ZIX is (op=0x81) ; ZIX { ZIX = A; }
+:STA ZIY is (op=0x91) ; ZIY { ZIY = A; }
+:STA ZPG is (op=0x85) ; ZPG { ZPG = A; }
+:STA ZPX is (op=0x95) ; ZPX { ZPX = A; }
+:STX ABS is (op=0x8e) ; ABS { ABS = X; }
+:STX ZPG is (op=0x86) ; ZPG { ZPG = X; }
+:STX ZPY is (op=0x96) ; ZPY { ZPY = X; }
+:STY ABS is (op=0x8c) ; ABS { ABS = Y; }
+:STY ZPG is (op=0x84) ; ZPG { ZPG = Y; }
+:STY ZPX is (op=0x94) ; ZPX { ZPX = Y; }
+
+@ifdef CMOS
+:STA ZIN is (op=0x92) ; ZIN { ZIN = A; }
+:STZ ZPG is (op=0x64) ; ZPG { ZPG = 0; }
+:STZ ZPX is (op=0x74) ; ZPX { ZPX = 0; }
+:STZ ABS is (op=0x9c) ; ABS { ABS = 0; }
+:STZ ABX is (op=0x9e) ; ABX { ABX = 0; }
+@endif
+
+# Branch instructions
+
+:BCC REL is op=0x90; REL {if (C == 0) goto REL;}
+:BCS REL is op=0xB0; REL {if (C) goto REL;}
+:BEQ REL is op=0xF0; REL {if (Z) goto REL;}
+:BMI REL is op=0x30; REL {if (N) goto REL;}
+:BNE REL is op=0xD0; REL {if (Z == 0) goto REL;}
+:BPL REL is op=0x10; REL {if (N == 0) goto REL;}
+:BVC REL is op=0x50; REL {if (V == 0) goto REL;}
+:BVS REL is op=0x70; REL {if (V) goto REL;}
+
+@ifdef CMOS
+:BRA REL is op=0x80; REL {goto REL;}
+@endif
+
+# Flag manipulation
+
+:CLC is op=0x18 {C = 0;}
+:CLD is op=0xD8 {D = 0;}
+:CLI is op=0x58 {I = 0;}
+:CLV is op=0xB8 {V = 0;}
+:SEC is op=0x38 {C = 1;}
+:SED is op=0xF8 {D = 1;}
+:SEI is op=0x78 {I = 1;}
+
+# Inc/dec register
+
+:DEX is op=0xCA {X = X - 1; resultFlags(X);}
+:DEY is op=0x88 {Y = Y - 1; resultFlags(Y);}
+:INY is op=0xC8 {Y = Y + 1; resultFlags(Y);}
+:INX is op=0xE8 {X = X + 1; resultFlags(X);}
+
+# Register transfer
+
+:TAX is op=0xAA {X = A;}
+:TAY is op=0xA8 {Y = A;}
+:TSX is op=0xBA {X = S;}
+:TXA is op=0x8A {A = X;}
+:TXS is op=0x9A {S = X;}
+:TYA is op=0x98 {A = Y;}
+
+# Stackstuff
+
+:PHP is op=0x8 {pushSR();}
+:PLP is op=0x28 {popSR();}
+:PHA is op=0x48 {*:1 (SP) = A; S = S - 1;}
+:PLA is op=0x68 {S = S + 1; A = *:1 (SP);}
+
+@ifdef CMOS
+:PHX is op=0xda {*:1 (SP) = X; S = S - 1;}
+:PLX is op=0xfa {S = S + 1; X = *:1 (SP);}
+:PHY is op=0x5a {*:1 (SP) = Y; S = S - 1;}
+:PLY is op=0x7a {S = S + 1; Y = *:1 (SP);}
+@endif
+
+# Control transfer
+
+:JMP ABS is (op=0x4c) ; ABS { goto ABS; }
+:JMP AIN is (op=0x6c) ; AIN { goto [AIN]; }
+
+@ifdef CMOS
+:JMP AIX is (op=0x7c) ; AIX { goto AIX; }
+@endif
+
+# :JMP ADDR16     is (op=0x4C); ADDR16
+# {
+# 	goto ADDR16;
+# }
+
+# :JMP ADDRI     is (op=0x6c); ADDRI
+# {
+# 	goto [ADDRI];
+# }
+
+:JSR ABS is op=0x20; ABS
+{
+	*:1 SP=PCH; S=S-1;
+	*:1 SP=PCL; S=S-1;
+
+	call ABS;
+}
+
+:RTI is op=0x40
+{
+	popSR();
+
+	S = S+1; lsb:1=*:1 SP;
+	S = S+1; msb:1=*:1 SP;
+
+	addr:2=(zext(msb)<<8)|zext(lsb);
+	return [addr];
+}
+
+:RTS is op=0x60
+{
+	S = S+1; lsb:1=*:1 SP;
+	S = S+1; msb:1=*:1 SP;
+
+	addr:2=(zext(msb)<<8)|zext(lsb);
+	return [addr];
+}
+
+# Other
+
+:NOP     is op=0xEA {}
+
+:BRK   is op=0x00
+{
+	goto inst_start;
+}
+

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<language_definitions>
+  
+  <language processor="6502"
+            endian="little"
+            size="16"
+            variant="NMOS"
+            version="1.0"
+            slafile="6502_nmos.sla"
+            processorspec="6502_generic.pspec"
+            id="6502:LE:16:NMOS">
+    <description>6502 Microcontroller Family</description>
+    <compiler name="default" spec="6502.cspec" id="default"/>
+    <external_name tool="IDA-PRO" name="m6502"/>
+	<external_name tool="IDA-PRO" name="m65c02"/>
+  </language>
+  
+  <language processor="6502"
+            endian="little"
+            size="16"
+            variant="CMOS"
+            version="1.0"
+            slafile="6502_cmos.sla"
+            processorspec="6502_generic.pspec"
+            id="6502:LE:16:CMOS">
+    <description>6502 Microcontroller Family</description>
+    <compiler name="default" spec="6502.cspec" id="default"/>
+    <external_name tool="IDA-PRO" name="m6502"/>
+	<external_name tool="IDA-PRO" name="m65c02"/>
+  </language>
+  
+</language_definitions>
