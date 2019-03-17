@@ -47,4 +47,11 @@ folder.
 * the new `6502 Constant Reference Analyzer` is active when the
   language is `6502`/`Default`, but it behaves as the `Basic Constant
   Reference Analyzer`. Need to fix this so that it just doesn't appear
-  
+  in the first place
+* the new sleigh stuff produces totally unreadable C code - should
+  probably dial back the accuracy a bit. I didn't realise the sleigh
+  description would be used for this when writing it
+* Ghidra is annoyingly keen on address 0 being invalid, which shows
+  itself up at least by `STA (0),Y` disassembling as, e.g., `STA
+  (0),Y=>DAT_0000` rather than `STA (DAT_0000),Y`
+* probably loads of others that I'll discover in time...
