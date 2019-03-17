@@ -183,6 +183,10 @@ public class Ghidra6502Analyzer extends ConstantPropagationAnalyzer {
 
 	public Ghidra6502Analyzer() {
 		super(PROCESSOR_NAME);
+
+		// This is a more sensible default for the 6502, but the option to change it
+		// is still open.
+		this.minStoreLoadRefAddress = 0;
 	}
 
 //	@Override
@@ -258,7 +262,15 @@ public class Ghidra6502Analyzer extends ConstantPropagationAnalyzer {
 
 	@Override
 	public void registerOptions(Options options, Program program) {
-		options.registerOption("M6502Analyzer Test", false, null, "Test option");
+		// As per minStoreLoadRefAddress, but this field is set in a particularly
+		// annoying fashion, and the only way to fix it seems to be to change the
+		// option's default value.
+		options.registerOption(MINSPECULATIVEREFADDRESS_OPTION_NAME, (long)0, null,
+				MINSPECULATIVEREFADDRESS_OPTION_DESCRIPTION);
+		
+		super.registerOptions(options, program);
+
+		this.minSpeculativeRefAddress = 0;
 	}
 
 //	@Override
