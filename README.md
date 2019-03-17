@@ -51,7 +51,9 @@ folder.
 * the new sleigh stuff produces totally unreadable C code - should
   probably dial back the accuracy a bit. I didn't realise the sleigh
   description would be used for this when writing it
-* Ghidra is annoyingly keen on address 0 being invalid, which shows
-  itself up at least by `STA (0),Y` disassembling as, e.g., `STA
-  (0),Y=>DAT_0000` rather than `STA (DAT_0000),Y`
+* Ghidra has special handling of address 0 in a few places, which I've
+  had show itself up most obviously as `STA (0),Y` disassembling as,
+  e.g., `STA (0),Y=>DAT_0000` rather than `STA (DAT_0000),Y`. I've
+  also seen `LDA #0` disassemble as `LDA #0=>DAT_0000`, which is
+  obviously wrong too, but that could be something I've done wrong
 * probably loads of others that I'll discover in time...
