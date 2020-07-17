@@ -138,8 +138,8 @@ class M6502SymbolicPropogator extends SymbolicPropogator {
 
 class M6502ConstantPropagationContextEvaluator extends ConstantPropagationContextEvaluator {
 	public M6502ConstantPropagationContextEvaluator(boolean trustWriteMemOption, long minStoreLoadRefAddress,
-			long minSpeculativeRefAddress) {
-		super(trustWriteMemOption, minStoreLoadRefAddress, minSpeculativeRefAddress);
+			long minSpeculativeRefAddress,long maxSpeculativeRefAddress) {
+		super(trustWriteMemOption, minStoreLoadRefAddress, minSpeculativeRefAddress,maxSpeculativeRefAddress);
 	}
 
 	@Override
@@ -255,7 +255,7 @@ public class Ghidra6502Analyzer extends ConstantPropagationAnalyzer {
 			final SymbolicPropogator symEval, final TaskMonitor monitor) throws CancelledException {
 
 		var eval = new M6502ConstantPropagationContextEvaluator(trustWriteMemOption, minStoreLoadRefAddress,
-				minSpeculativeRefAddress);
+				minSpeculativeRefAddress,maxSpeculativeRefAddress);
 
 		return symEval.flowConstants(flowStart, flowSet, eval, true, monitor);
 	}
