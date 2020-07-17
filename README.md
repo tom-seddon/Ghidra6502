@@ -1,6 +1,6 @@
-# improved 6502 support for Ghidra
+# Improved 6502 support for Ghidra
 
-## new 6502 CPU description
+## New 6502 CPU description
 
 Pick `6502`/`NMOS` from the language list.
 
@@ -16,7 +16,7 @@ Pick `6502`/`CMOS` from the language list.
 
 This supports the basic set of CMOS instructions only.
 
-## new 6502 analyzer
+## New 6502 analyzer
 
 This appears as `6502 Constant Reference Analyzer` in the analysis
 options.
@@ -31,17 +31,25 @@ The `(zp,X)` addressing mode is still treated as a reference to
 
 The 6502 analyzer 
 
-# installation
+# Build
 
-The repo contains an Eclipse project. Presumably it's possible to make
-it generate a `.jar` file for easy installation, but I don't know how,
-so for now: import Eclipse project into your workspace, and run Ghidra
-from inside Eclipse.
+Run the following Gradle task.
+```
+set GHIDRA_INSTALL_DIR=/YOUR_INSTALL_PATH/Ghidra
+gradle buildExtension
+```
 
-Ghidra should build the CPU descriptions automatically, but I've found
-this a bit flaky. You can build them by running `ant` in the `data`
-folder.
+A zip should be created in the `dist/` directory. (`ie: ghidra_9.1.2_PUBLIC_20200717_Ghidra6502.zip`)
 
-# other notes
+# Installation
+
+Copy the the zip file `ghidra_XXX_PUBLIC_XXX_Ghidra6502.zip` to your Ghidra extension directory: `/GHIDRA_DIR/Extensions/Ghidra`.
+
+From Ghidra :
+ 1. Open the menu item `File > Install Extensions`
+ 2. Check the `Ghidra 6502` extension 
+ 3. Restart
+
+# Other notes
 
 Known issues: https://github.com/tom-seddon/Ghidra6502/issues
